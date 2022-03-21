@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+
+# This file is part of VoltDB.
+# Copyright (C) 2019-2021 VoltDB Inc.
+
+# Script to execute Prometheus statistics agent as
+# a standalone program. For use in Kubernetes,
+# see voltdb-prometheus-k8s.
+#
+# Command-line options for the VoltDBPrometheusAgent
+# are listed below, and shown with '--help'
+#
+# Environment Variables
+#   JAVA_HOME          The java implementation to use.
+#   VOLTDB_HEAPSIZE    The maximum amount of heap to use, in MB; default is 1024.
+#   LOG4J_CONFIG_PATH  Path to alternative log4j configuration.
+
+# Converts relative path to absolute path
+function abspath {
+    local path=$1
+    if [ -d $path ] ; then
+        local abspath=$(cd $path; pwd)
+    else
+        local dirname=$(cd $(dirname -- $path) ; pwd)
+        local basename=$(basename $path)
+        local abspath=$dirname/$basename
+    fi
+    echo $abspath
+}
+
+# Check for --help before doing anything else
+for arg in $@; do
+    if [[ $arg == '--help' || $arg == '-h' ]]; then
+        echo 'Options:
+
+   --servers=       (VoltDB servers, default "localhost")
+   --port=          (VoltDB port, default 21211)
+   --user=          (Username for VoltDB, if required)
+   --password=      (Password for VoltDB, if required)
+   --credentials=   (Properties file containing VoltDB username/password)
+   --ssl= or --ssl  (Enable SSL, optional properties file)
+   --webserverport= (HTTP port for plugin, default 1234)
+   --skipstats=     (Comma-delimited list of statistics to skip in the agent, default=None)
+   --stats=         (Comma-delimited list of statistics to include in the agent, default=All)
+   --delta=         (True/false for delta statistics or not, default false)
+'
+    exit 0
+    fi
+done
+
+# Option controlling what goes into CLASSPATH
+# 0 to add all jars from VOLTDB_LIB (previous behaviour)
+# 1 to add only what we think we need
+selective_jars=1
+
+# Set up some important variables
+# THIS_DIR     directory for this script
+# VOLTDB_HOME  root of installation -or- staging dir in pro workspace
+# VOLTDB_LIB   directory to search for jar files
+# VOLTDB_JAR   the voltdb-*.*jar file for the release
+# AGENT_JAR    path for voltdb-prometheus.jar
+#
+# $0 is this file. Peeling off 3 components gets us to the installation
+# directory (which is voltdb-ent-n.n after untarring, but may be renamed
+# to just voltdb). Assume we're running from there.
+THIS_DIR=$(dirname $(abspath $0))
+AGENT_JAR=$PWD/voltdb-prometheus.jar
+
+# If we're really running out of a git workspace, switch VOLTDB_HOME to
+# the staging dir, but take the agent jar from the build directly so
+# a simple recompile can be used in development.
+if [ -f $VOLTDB_HOME/mmt.xml ] && [ -d $VOLTDB_HOME/src ]; then
+    echo "Running from source tree $VOLTDB_HOME"
+    pro_base=$VOLTDB_HOME
+    staging_dir=$(ls -1dr $pro_base/obj/pro/voltdb-ent-[0-9]* 2>/dev/null | grep -v ".gz" | head -1)
+    if [ -z "$staging_dir" ]; then
+        echo "Couldn't find staging directory in $pro_base/... (need to build a kit?)"
+        exit 1
+    fi
+    echo "Found staging directory $staging_dir"
+    VOLTDB_HOME=$staging_dir
+    AGENT_JAR=$pro_base/obj/prometheus/voltdb-prometheus.jar
+fi
+
+# Jar files will be found here
+VOLTDB_LIB=$PWD/lib
+if [ ! -d $VOLTDB_LIB ]; then
+    echo "Cannot find library directory: $VOLTDB_LIB"
+    exit 1
+fi
+echo "Found library directory $VOLTDB_LIB"
+
+# Find required base jars
+#VOLTDB_JAR=$(ls -1d $VOLTDB_HOME/voltdb/voltdb-*.*.jar 2>/dev/null | grep -v "doc.jar" | head -1)
+#if [ -z "$VOLTDB_JAR" ]; then
+#    echo "Couldn't find compiled VoltDB jar (voltdb-NN.N.jar)"
+#    exit 1
+#fi
+#echo "Found voltdb jar $VOLTDB_JAR"
+#if [ ! -f $AGENT_JAR ]; then
+#    echo "Cannot find prometheus agent: $AGENT_JAR"
+#    exit 1
+#fi
+#echo "Found prometheus agent jar $AGENT_JAR"
+
+# Check for specific java requirement
+if [ -n "$JAVA_HOME" ]; then
+    JAVA=$JAVA_HOME/bin/java
+else
+    JAVA=$(which java)
+    if [ -z "$JAVA" ]; then
+        echo "Couldn't find java"
+        exit 1
+    fi
+fi
+
+# Check envvars which might override default args
+if [ -n "${VOLTDB_HEAPSIZE:+x}" ]; then
+    JAVA_HEAP_MAX="-Xmx""$VOLTDB_HEAPSIZE""m"
+else
+    JAVA_HEAP_MAX='-Xmx1024m'
+fi
+
+# Check envvars to see if the user overrides log4j conf, else
+# default to file from local dir
+#if [ -z "${LOG4J_CONFIG_PATH}" ]; then
+#    LOG4J_CONFIG_PATH=$THIS_DIR/log4j.xml
+#fi
+#if [ ! -f "$LOG4J_CONFIG_PATH" ]; then
+#    echo "Couldn't find log4j configuration file $LOG4J_CONFIG_PATH"
+#    exit 1
+#fi
+LOG4J_CONFIG_PATH=$PWD/log4j.properties
+
+# Start CLASSPATH with agent and voltdb jars
+CLASSPATH=$AGENT_JAR:$PWD/lib/*
+
+# Add third-party jar files
+add_libs() {
+    local p=$VOLTDB_LIB/$1*.jar
+    local f
+    for f in $p; do
+        if [ -f $f ]; then
+            CLASSPATH=$CLASSPATH:$f
+        else
+            echo "Not found: $f"
+        fi
+    done
+}
+
+if [ $selective_jars -ne 0 ]; then
+    echo "Selecting library jars from $VOLTDB_LIB"
+    add_libs 'simpleclient'
+    add_libs 'jetty'
+    add_libs 'javax'
+    add_libs 'netty-all'
+    add_libs 'servlet-api'
+    add_libs 'snappy-java'
+    add_libs 'log4j'
+else
+    # Add them all (overkill perhaps)
+    add_libs
+fi
+
+# For Java 11 and later, use --add-opens to suppress a warning
+# about illegal reflection (from VoltNetwork actions).
+add_opens=
+jversion=$("$JAVA" -version 2>&1 | sed -E -n 's/.* version "([0-9]+).*/\1/p')
+if [[ "$jversion" -ge 11 ]]; then
+    add_opens="--add-opens java.base/sun.nio.ch=ALL-UNNAMED"
+fi
+
+# And we are ready to go
+cd $THIS_DIR
+echo " "
+echo "Starting VoltDB Prometheus Agent"
+echo "  from $AGENT_JAR"
+echo "  running in directory $PWD"
+echo "  using logging configuration from $LOG4J_CONFIG_PATH"
+echo " "
+exec $JAVA -server -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp -XX:-ReduceInitialCardMarks $JAVA_HEAP_MAX \
+     $add_opens -Dlog4j.configuration=file://$LOG4J_CONFIG_PATH \
+     -classpath $CLASSPATH org.voltdb.prometheus.VoltDBPrometheusAgent \
+      $@
+exit 1
