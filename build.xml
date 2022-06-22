@@ -1,4 +1,4 @@
-<project default="compile">
+<project default="zip">
     <target name="compile">
         <mkdir dir="bin"/>
         <javac srcdir="src" destdir="bin">
@@ -24,7 +24,16 @@
     		</classpath>
 	</javac>
     </target>
-    <jar destfile="voltdb-prometheus.jar">
-    	<fileset dir="bin"/>
-    </jar>
+    <target name="jar" depends="compile">
+    	<jar destfile="voltdb-prometheus.jar">
+    	    <fileset dir="bin"/>
+    	</jar>
+    </target>
+    <target name="zip" depends="jar">
+	<zip destfile="voltdb-prometheus.zip">
+     	    <fileset dir="." includes="voltdb-prometheus.jar"/>
+	    <fileset dir="." includes="voltdb-prometheus"/>
+	</zip>
+    </target>
+    <target name="default" depends="zip"/>
 </project>
