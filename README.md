@@ -5,7 +5,7 @@ Grafana outside of VoltDB cluster - https://grafana.com/docs/grafana/latest/inst
 ## Build Instructions
 1. `git clone https://github.com/ssomagani/volt-prometheus-grafana` \
 `cd volt-prometheus-grafana` \
-`ant` \
+`ant` 
 
 ## Run Instructions
 1. Install VoltDB-Prometheus Agent
