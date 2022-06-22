@@ -7,6 +7,7 @@ Grafana outside of VoltDB cluster - https://grafana.com/docs/grafana/latest/inst
 `cd volt-prometheus-grafana`
 `ant`
 
+## Run Instructions
 1. Install VoltDB-Prometheus Agent
 1.1 Unzip the voltdb-prometheus.zip file on any node in your VoltDB cluster
 
