@@ -3,7 +3,7 @@ Prometheus Server outside of VoltDB cluster - https://prometheus.io/docs/prometh
 Grafana outside of VoltDB cluster - https://grafana.com/docs/grafana/latest/installation/
 
 ## Build Instructions
-1. git clone https://github.com/ssomagani/volt-prometheus-grafana
+1. `git clone https://github.com/ssomagani/volt-prometheus-grafana`
 `cd volt-prometheus-grafana`
 `ant`
 
