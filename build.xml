@@ -35,5 +35,4 @@
 	    <fileset dir="." includes="voltdb-prometheus"/>
 	</zip>
     </target>
-    <target name="default" depends="zip"/>
 </project>
