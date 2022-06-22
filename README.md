@@ -1,11 +1,11 @@
 ## Requirements
-Prometheus Server outside of VoltDB cluster - https://prometheus.io/docs/prometheus/latest/installation/
-Grafana outside of VoltDB cluster - https://grafana.com/docs/grafana/latest/installation/
+Prometheus Server outside of VoltDB cluster - https://prometheus.io/docs/prometheus/latest/installation/ \
+Grafana outside of VoltDB cluster - https://grafana.com/docs/grafana/latest/installation/ \
 
 ## Build Instructions
-1. `git clone https://github.com/ssomagani/volt-prometheus-grafana`
-`cd volt-prometheus-grafana`
-`ant`
+1. `git clone https://github.com/ssomagani/volt-prometheus-grafana` \
+`cd volt-prometheus-grafana` \
+`ant` \
 
 ## Run Instructions
 1. Install VoltDB-Prometheus Agent
